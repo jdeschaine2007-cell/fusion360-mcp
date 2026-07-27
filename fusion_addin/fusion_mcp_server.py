@@ -50,12 +50,32 @@ COMM_DIR.mkdir(exist_ok=True)
 # An LLM call is injected here so the add-in stays free of any specific
 # provider SDK. Signature: fn(prompt: str, system: str) -> str (raw JSON text)
 LLM_CALLABLE = None
+_OLLAMA_TRIED = False
 
 
 def set_llm_callable(fn: Callable[[str, str], str]):
     """Register a callable the plan_design tool uses to talk to an LLM."""
     global LLM_CALLABLE
     LLM_CALLABLE = fn
+
+
+def _maybe_autowire_llm():
+    """Lazily try to wire an Ollama LLM (qwen3:8b) so plan_design
+    is zero-config. No-ops silently if Ollama isn't running / has no
+    model, leaving LLM_CALLABLE None until you set one yourself."""
+    global LLM_CALLABLE, _OLLAMA_TRIED
+    if LLM_CALLABLE is not None or _OLLAMA_TRIED:
+        return
+    _OLLAMA_TRIED = True
+    try:
+        from .ollama_llm import get_callable
+        fn, model = get_callable()
+        if fn is not None:
+            LLM_CALLABLE = fn
+            print(f"[FusionMCP] auto-wired LLM: {model}")
+    except Exception:
+        # Ollama not present / unreachable — fine, planning just stays off.
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -349,8 +369,9 @@ def plan_design(prompt: str, units: str = "mm") -> Dict[str, Any]:
     """
     if make_preview is None:
         return {"error": "preview renderer (mcp_server.preview) not available"}
+    _maybe_autowire_llm()
     if LLM_CALLABLE is None:
-        return {"error": "no LLM configured; set_llm_callable() before planning"}
+        return {"error": "no LLM configured; set_llm_callable() or run Ollama before planning"}
 
     context = _design_context()
     full_prompt = (

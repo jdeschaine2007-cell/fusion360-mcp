@@ -18,5 +18,5 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install "mcp[cli]" "uvicorn[standard]" matplotlib numpy pytest pytest-asyncio httpx
-      - name: Run beta suite (real MCP SSE protocol, both backends, headless stubs)
-        run: pytest tests/test_fusion_mcp_addin.py tests/test_e2e_mcp_server.py
+      - name: Run beta suite (real MCP SSE protocol, both backends, headless stubs, Ollama auto-wire)
+        run: pytest tests/  # conftest isolates the beta subset from the legacy upstream suite
