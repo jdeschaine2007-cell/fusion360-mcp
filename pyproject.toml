@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fusion360-mcp"
+version = "2.0.0"
+description = "FusionMCP — dual-CAD MCP server (Fusion 360 + Vectorworks) with plan-then-preview."
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+# Deps needed to RUN the add-in inside a CAD app's Python.
+server = ["mcp[cli]", "uvicorn[standard]", "matplotlib", "numpy"]
+# Deps needed only to run the test/beta suite.
+test = ["pytest", "pytest-asyncio", "httpx", "mcp[cli]", "uvicorn[standard]", "matplotlib", "numpy"]
+
+[tool.pytest.ini_options]
+# Mirror of tests/pytest.ini; kept here so `pytest` works from repo root too.
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["-v", "--tb=short", "--strict-markers", "--strict-config"]
+asyncio_mode = "auto"
+markers = [
+    "asyncio: marks tests as async",
+    "integration: marks tests as integration tests",
+    "slow: marks tests as slow running",
+]

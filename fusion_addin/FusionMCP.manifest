@@ -1,13 +1,10 @@
 {
-    "autodeskProduct": "Fusion360",
-    "type": "addin",
-    "id": "com.fusionmcp.addin",
-    "author": "FusionMCP Team",
-    "description": {
-        "": "Multi-model MCP integration for AI-powered parametric CAD design"
-    },
-    "version": "1.0.0",
-    "runOnStartup": false,
-    "supportedOS": "windows|mac",
-    "editEnabled": true
+  "autodeskProduct": "Fusion360",
+  "type": "addin",
+  "id": "FusionMCP",
+  "author": "FusionMCP",
+  "description": "Model Context Protocol server for Fusion 360 with geometry + plan-preview tools.",
+  "version": "2.0.0",
+  "runOnStartup": false,
+  "isHidden": false
 }

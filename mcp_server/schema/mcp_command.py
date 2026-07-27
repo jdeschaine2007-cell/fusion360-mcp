@@ -57,6 +57,7 @@ class MCPCommand(BaseModel):
         "context_update",
         "execute_action",
         "validate_action",
+        "plan_action",
         "list_models",
         "health_check"
     ] = Field(description="Command type")

@@ -447,11 +447,34 @@ Get conversation history.
 1. **Creative Design**: OpenAI GPT-4o → Claude (validation)
 2. **Geometric Precision**: Gemini → OpenAI
 3. **Privacy-First**: Ollama (all tasks)
-4. **Cost-Optimized**: Gemini Flash → Ollama (fallback)
+|4. **Cost-Optimized**: Gemini Flash → Ollama (fallback) |
 
-## 🛠️ Development
+| ## 📐 Plan Mode (preview before you build)
 
-### Project Structure
+FusionMCP supports a **plan-then-confirm** flow so nothing is committed to
+your design until you approve it.
+
+**How it works**
+1. Type a request in the **MCP Assistant** palette (e.g. *"A 100x50mm base
+   plate with an M5 hole and a 40mm post"*).
+2. Click **Preview Plan**. The server asks the LLM for proposed actions and
+   builds a step-by-step **plan** plus a synthetic **3D preview PNG**
+   (box = blue, cylinder = green tube, sphere = purple wireframe, hole =
+   orange dashed ring). **No Fusion geometry is created yet.**
+3. Review the schematic. Click **Execute** to build the real features via the
+   Fusion add-in, or **Cancel** to discard.
+
+The preview is a *synthetic plan sketch* (matplotlib), clearly distinct from the
+final Fusion geometry — it is for judging the layout/sizes before committing.
+
+**Endpoint / command**
+- `POST /mcp/command` with `"command": "plan_action"` (same `params` +
+  `context` shape as `ask_model`). Response `status` is `"planned"` and the
+  `metadata_dict` carries `plan_text` and `preview_png` (base64 data-URI).
+- The add-in's `MCPPalette.html` + `ui_dialog.py` already wire the palette
+  buttons to this flow.
+
+
 
 ```
 fusion360-mcp/
@@ -678,3 +701,74 @@ MIT License - see [LICENSE](LICENSE) file
 ---
 
 **Built with ❤️ for the Fusion 360 and AI community**
+
+---
+
+## 🔌 Merged MCP add-in (FusionMCP) — dual-CAD, NOW SHIPPING
+
+This repo ships a **standards-compliant MCP server add-in** that merges the
+best of both upstreames AND adds a **Vectorworks backend**:
+
+- **Protocol from Joe-Spencer/fusion-mcp-server** — a real `FastMCP` server
+  (SSE @ `http://127.0.0.1:3000/sse`) so any MCP client (Claude
+  Desktop, Cursor, Cline) connects, with no hardcoded paths and no
+  debug-file spam.
+- **Geometry from jaskirat1616/fusion360-mcp** — working `adsk` calls
+  that actually BUILD parts: `create_box`, `create_cylinder`, `create_sphere`,
+  `create_hole`, `apply_material`, plus `sketch`/`parameter` helpers.
+- **Vectorworks backend** (NEW) — same action schema, same preview, but
+  executed through the `vs.py` module. Vectorworks had **no public MCP
+  server** (verified via GitHub search); this fills that gap with the exact
+  architecture proven for Fusion.
+
+It ALSO exposes the **plan-then-review** flow (`plan_design`): ask an LLM
+for proposed actions, render a synthetic 3D preview PNG, return the plan
+**without building anything** — execute only via the explicit geometry tools.
+
+### Files
+```
+fusion_addin/
+  run.py                  # Fusion 360 add-in entry: "FusionMCP" button starts server
+  fusion_mcp_server.py   # FastMCP server: resources + tools + plan_design + backend switch
+  fusion_geometry.py      # REAL adsk geometry calls (unit-aware)
+  FusionMCP.manifest     # add-in manifest
+vectorworks/
+  run.py                  # Vectorworks entry: forces the vs.py backend
+  vectorworks_geometry.py # REAL vs.py geometry calls (same action schema)
+install_for_fusion.py     # installs mcp/matplotlib/numpy into Fusion's Python
+```
+
+### Install & run (auto-detecting — one server, two CAD apps)
+1. `pip install -r requirements.txt`          (for local testing / preview)
+2. `python install_for_fusion.py`            (puts mcp + matplotlib + numpy
+                                             into Fusion 360's own Python;
+                                             adapt the path for Vectorworks' Python)
+3. **Fusion 360:** Scripts & Add-Ins → Add-Ins → + → select `fusion_addin/`
+   → Run the **FusionMCP** command.
+   **Vectorworks:** Scripts → Run Script → select `vectorworks/run.py`
+   (or install as a plug-in).
+4. Point your MCP client at `http://127.0.0.1:3000/sse`. The server
+   auto-detects the host (adsk vs vs) and exposes `fusion://backend`
+   so the client knows which app it is driving.
+   - `plan_design("a 100x50mm base plate with an M5 hole")` → returns
+     `plan_text` + `preview_png` (base64). Nothing is built.
+   - `create_box(100, 50, 5, "mm")` → builds the real geometry
+     in whichever CAD app is active.
+
+### Wiring an LLM for plan_design
+The add-in is provider-agnostic. In your loader, before starting the
+server, register a callable:
+```python
+import fusion_addin.fusion_mcp_server as srv
+srv.set_llm_callable(lambda prompt, system: my_llm(prompt, system))
+```
+The callable must return the model's raw JSON (an `{"actions":[...]}`
+object). Leave it unset and `plan_design` returns an error while the
+geometry tools still work standalone.
+
+### Tests
+- `tests/test_fusion_mcp_addin.py` — headless smoke test with stubbed `adsk`
+  AND `vs` (under `tests/stubs/`): proves tools register, the Fusion
+  backend drives the real adsk call chain (mm→cm), the Vectorworks backend
+  drives the real `vs` call chain, and `plan_design` returns a plan +
+  preview PNG on BOTH backends — all WITHOUT a live CAD instance.

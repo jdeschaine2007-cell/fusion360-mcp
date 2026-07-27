@@ -6,7 +6,7 @@ import asyncio
 from typing import Dict, Optional, Tuple
 from loguru import logger
 
-from .schema import MCPCommand, LLMResponse, LLMResponseMetadata, LLMError, MCPResponse
+from .schema import MCPCommand, LLMResponse, LLMResponseMetadata, LLMError, MCPResponse, FusionAction
 from .llm_clients import OllamaClient, OpenAIClient, GeminiClient, ClaudeClient
 from .utils import Config
 from datetime import datetime
@@ -69,6 +69,8 @@ class MCPRouter:
         """
         if command.command == "ask_model":
             return await self._handle_ask_model(command, system_prompt)
+        elif command.command == "plan_action":
+            return await self._handle_plan_action(command, system_prompt)
         elif command.command == "list_models":
             return await self._handle_list_models()
         elif command.command == "health_check":
@@ -256,6 +258,85 @@ class MCPRouter:
                 retry_count=self.config.max_retries,
                 recoverable=True
             )
+        )
+
+    async def _handle_plan_action(
+        self,
+        command: MCPCommand,
+        system_prompt: Optional[str]
+    ) -> MCPResponse:
+        """
+        PLAN (no execution): ask the LLM for proposed actions, then build a
+        human-readable plan + a synthetic preview PNG. Nothing is committed to
+        Fusion — the add-in shows the result and only executes on EXECUTE.
+        """
+        if not command.params:
+            return MCPResponse(
+                status="error",
+                message="Missing model parameters",
+                actions_to_execute=[]
+            )
+
+        provider = command.params.provider
+        model = command.params.model
+        prompt = command.params.prompt
+
+        # Build context-aware prompt (same as ask_model)
+        if command.context:
+            ctx = command.context
+            context_str = (
+                f"\nDesign Context:\n"
+                f"- Active Component: {ctx.active_component}\n"
+                f"- Units: {ctx.units}\n"
+                f"- Design State: {ctx.design_state}\n"
+            )
+            prompt = context_str + "\n" + prompt
+
+        llm_response = await self._generate_with_retry(
+            provider=provider,
+            model=model,
+            prompt=prompt,
+            system_prompt=system_prompt,
+            temperature=command.params.temperature,
+            max_tokens=command.params.max_tokens
+        )
+
+        if not llm_response.success:
+            return MCPResponse(
+                status="error",
+                llm_response=llm_response,
+                message=(f"Model failed to propose a plan: "
+                         f"{llm_response.error.message if llm_response.error else 'Unknown error'}"),
+                actions_to_execute=[]
+            )
+
+        # Build the plan + preview from the model's raw output. We deliberately
+        # do NOT use llm_response.action (strict schema); make_preview mines
+        # the action JSON out of the raw text so any model shape works.
+        from .preview import make_preview
+        unit_hint = command.context.units if command.context else "mm"
+        preview = make_preview(llm_response.raw_output, None)
+        preview["llm_response"] = {
+            "provider": llm_response.provider,
+            "model": llm_response.model,
+        }
+
+        from .schema import FusionAction
+        planned_actions = []
+        for a in preview["actions"]:
+            try:
+                planned_actions.append(FusionAction(**a))
+            except Exception:
+                # Keep the raw dict if it doesn't match the strict schema;
+                # the add-in only needs the dict at execute time anyway.
+                planned_actions.append(a)
+
+        return MCPResponse(
+            status="planned",
+            llm_response=llm_response,
+            message="Plan ready for review — press EXECUTE to build in Fusion.",
+            actions_to_execute=planned_actions,
+            metadata_dict=preview  # carries plan_text + preview_png to the add-in
         )
 
     async def _handle_list_models(self) -> MCPResponse:

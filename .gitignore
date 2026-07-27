@@ -45,6 +45,14 @@ logs/
 .cache/
 context_cache.db
 *.db
+context_cache.json
+tests/context_cache.json
+
+# Generated preview artifacts
+sample_preview.png
+plan_sample.png
+plan_vectorworks.png
+*.preview.png
 
 # OS
 .DS_Store

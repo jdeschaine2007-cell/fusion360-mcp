@@ -12,7 +12,7 @@ from .fusion_action import FusionAction, ActionSequence
 
 class LLMResponseMetadata(BaseModel):
     """Metadata about the LLM response"""
-    provider: Literal["ollama", "openai", "gemini", "claude"] = Field(description="Provider name")
+    provider: Literal["ollama", "openai", "gemini", "claude", "system"] = Field(description="Provider name")
     model: str = Field(description="Model name")
     timestamp: datetime = Field(default_factory=datetime.now, description="Response timestamp")
     tokens_used: Optional[int] = Field(default=None, description="Tokens consumed")
@@ -76,7 +76,7 @@ class LLMResponse(BaseModel):
 
 class MCPResponse(BaseModel):
     """Response sent back to Fusion 360"""
-    status: Literal["success", "error", "clarification_needed", "partial"] = Field(
+    status: Literal["success", "error", "clarification_needed", "partial", "planned"] = Field(
         description="Response status"
     )
     llm_response: Optional[LLMResponse] = Field(default=None, description="LLM response data")
@@ -86,6 +86,10 @@ class MCPResponse(BaseModel):
         description="Actions ready for execution"
     )
     warnings: List[str] = Field(default_factory=list, description="Warning messages")
+    metadata_dict: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Extra payload for the add-in (e.g. plan_text + preview_png for plan mode)"
+    )
 
     class Config:
         json_schema_extra = {

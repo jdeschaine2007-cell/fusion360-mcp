@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>FusionMCP Assistant</title>
+<style>
+  html, body { margin: 0; height: 100%; font-family: "Segoe UI", Arial, sans-serif;
+    background: #1e1e1e; color: #e8e8e8; font-size: 13px; }
+  #wrap { display: flex; flex-direction: column; height: 100vh; padding: 10px; box-sizing: border-box; }
+  #bar { display: flex; gap: 6px; }
+  #prompt { flex: 1; padding: 8px; border: 1px solid #3a3a3a; border-radius: 6px;
+    background: #2a2a2a; color: #fff; }
+  button { padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+  #planBtn { background: #2980b9; color: #fff; }
+  #execBtn { background: #27ae60; color: #fff; display: none; }
+  #cancelBtn { background: #c0392b; color: #fff; display: none; }
+  #status { margin: 6px 0; min-height: 18px; color: #9aa0a6; }
+  #preview { flex: 1; border: 1px solid #3a3a3a; border-radius: 6px; margin: 6px 0;
+    background: #fff; background-size: contain; background-repeat: no-repeat; background-position: center; }
+  #plan { white-space: pre-wrap; font-family: Consolas, monospace; font-size: 12px;
+    background: #141414; border: 1px solid #3a3a3a; border-radius: 6px; padding: 8px;
+    max-height: 30%; overflow: auto; display: none; }
+  .hint { color: #6a6a6a; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bar">
+    <input id="prompt" type="text" placeholder="Describe the part, e.g. 'A 100x50mm base plate with an M5 hole and a 40mm post'" />
+    <button id="planBtn">Preview Plan</button>
+    <button id="execBtn">Execute</button>
+    <button id="cancelBtn">Cancel</button>
+  </div>
+  <div id="status">Type a request and press <b>Preview Plan</b>. Nothing is built until you press <b>Execute</b>.</div>
+  <div id="preview"></div>
+  <pre id="plan"></pre>
+</div>
+
+<script type="text/javascript">
+  // Fusion injects an object named `adsk` (the Palette API). Guard for dev/test.
+  var adskReady = (typeof adsk !== "undefined" && adsk && adsk.fusion && adsk.fusion.Palette);
+  function sendToAddIn(payload) {
+    if (adskReady) {
+      var s = '{"id":' + Date.now() + ',"action":"' + payload.action + '",' +
+              '"data":' + JSON.stringify(payload.data) + '}';
+      adsk.fusion.Palette.sendInfoToHTML(s);
+    } else {
+      // Dev fallback: log so you can verify the wiring in a browser console.
+      console.log("[FusionMCP->AddIn]", payload);
+      window.__lastSent = payload;
+    }
+  }
+
+  var state = { plan: null, actions: null };
+
+  function setPlan(resp) {
+    state.actions = resp.actions || null;
+    state.plan = resp.plan_text || "";
+    document.getElementById("plan").textContent = state.plan;
+    document.getElementById("plan").style.display = "block";
+    if (resp.preview_png) {
+      document.getElementById("preview").style.backgroundImage = "url(" + resp.preview_png + ")";
+    } else {
+      document.getElementById("preview").style.backgroundImage = "none";
+    }
+    document.getElementById("execBtn").style.display = "inline-block";
+    document.getElementById("cancelBtn").style.display = "inline-block";
+    document.getElementById("status").textContent =
+      resp.actions && resp.actions.length
+        ? "Plan ready — review the schematic, then press EXECUTE."
+        : "Model returned no actions.";
+  }
+
+  document.getElementById("planBtn").addEventListener("click", function () {
+    var txt = document.getElementById("prompt").value.trim();
+    if (!txt) { document.getElementById("status").textContent = "Please type a request first."; return; }
+    document.getElementById("status").textContent = "Generating plan…";
+    sendToAddIn({ action: "plan", data: { prompt: txt } });
+  });
+
+  document.getElementById("execBtn").addEventListener("click", function () {
+    if (!state.actions) return;
+    document.getElementById("status").textContent = "Executing in Fusion…";
+    sendToAddIn({ action: "execute", data: { actions: state.actions } });
+    document.getElementById("execBtn").style.display = "none";
+    document.getElementById("cancelBtn").style.display = "none";
+  });
+
+  document.getElementById("cancelBtn").addEventListener("click", function () {
+    state.actions = null;
+    document.getElementById("plan").style.display = "none";
+    document.getElementById("preview").style.backgroundImage = "none";
+    document.getElementById("execBtn").style.display = "none";
+    document.getElementById("cancelBtn").style.display = "none";
+    document.getElementById("status").textContent = "Cancelled.";
+  });
+
+  // Add-in -> HTML messages arrive here (plan result, execution status).
+  function onAddInMessage(msg) {
+    try {
+      var m = (typeof msg === "string") ? JSON.parse(msg) : msg;
+      if (m.action === "plan_result") { setPlan(m.data || {}); }
+      else if (m.action === "exec_result") {
+        document.getElementById("status").textContent = m.data && m.data.message
+          ? ("Done: " + m.data.message) : "Execution finished.";
+      }
+      else if (m.action === "error") {
+        document.getElementById("status").textContent = "Error: " + (m.data && m.data.message || "unknown");
+      }
+    } catch (e) { console.error(e); }
+  }
+
+  // Expose for the add-in's sendInfoToHTML / incomingMessage path.
+  if (typeof window !== "undefined") { window.onAddInMessage = onAddInMessage; }
+  // Some Fusion versions invoke a global callback name; support both.
+  if (typeof this !== "undefined") { this.onAddInMessage = onAddInMessage; }
+</script>
+</body>
+</html>
