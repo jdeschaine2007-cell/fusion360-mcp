@@ -66,7 +66,7 @@ def create_box(app, params: Dict[str, Any]) -> str:
 
 def create_cylinder(app, params: Dict[str, Any]) -> str:
     import vs
-    r = _to_doc(params.get("radius", 0), params.get("unit", "mm"))
+    r = _to_doc(params.get("radius") or (params.get("diameter", 0) / 2.0), params.get("unit", "mm"))
     h = _to_doc(params.get("height", 0), params.get("unit", "mm"))
 
     vs.CreateCircleN(0, 0, r)

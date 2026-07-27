@@ -130,7 +130,8 @@ def _describe(action: str, p: dict, unit: str) -> str:
                 f"{_fmt_dim(_unit_to_cm(p.get('height', 0), unit))} × "
                 f"{_fmt_dim(_unit_to_cm(p.get('depth', 0), unit))}")
     if a == "create_cylinder":
-        return (f"Cylinder  ⌀ {_fmt_dim(2 * _unit_to_cm(p.get('radius', 0), unit))} "
+        _cyl_r = p.get('radius') or (p.get('diameter', 0) / 2.0)
+        return (f"Cylinder  ⌀ {_fmt_dim(2 * _unit_to_cm(_cyl_r, unit))} "
                 f"× {_fmt_dim(_unit_to_cm(p.get('height', 0), unit))}")
     if a == "create_sphere":
         return f"Sphere  ⌀ {_fmt_dim(2 * _unit_to_cm(p.get('radius', 0), unit))}"
@@ -192,7 +193,7 @@ def render_preview_png(actions: List[dict], unit_hint: str = "mm") -> str:
             shapes.append({"kind": "box", "label": "Box", "size": (w, h, d), "z0": z_cursor, "color": "#3498db"})
             z_cursor += d + 1.0
         elif act == "create_cylinder":
-            r = _unit_to_cm(p.get("radius", 0), u)
+            r = _unit_to_cm(p.get("radius") or (p.get("diameter", 0) / 2.0), u)
             hgt = _unit_to_cm(p.get("height", 0), u)
             shapes.append({"kind": "cyl", "label": "Cyl", "size": (2 * r, 2 * r, hgt), "z0": z_cursor, "color": "#16a085"})
             z_cursor += hgt + 1.0

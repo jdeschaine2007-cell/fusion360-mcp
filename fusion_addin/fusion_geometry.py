@@ -65,7 +65,7 @@ def create_box(app, params: Dict[str, Any]) -> str:
 def create_cylinder(app, params: Dict[str, Any]) -> str:
     import adsk
     root = _root_component(app)
-    r = _to_cm(params.get("radius", 0), params.get("unit", "mm"))
+    r = _to_cm(params.get("radius") or (params.get("diameter", 0) / 2.0), params.get("unit", "mm"))
     h = _to_cm(params.get("height", 0), params.get("unit", "mm"))
 
     sketch = root.sketches.add(root.xYConstructionPlane)

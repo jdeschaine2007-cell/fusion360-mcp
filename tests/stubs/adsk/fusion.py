@@ -17,7 +17,10 @@ class Sketch:
     def __init__(self):
         self.profiles = _Obj(item=lambda i: Profile(i))
         self.sketchCurves = _Obj(
-            sketchLines=_Obj(addTwoPointRectangle=lambda a, b: "rect"),
+            sketchLines=_Obj(
+                addTwoPointRectangle=lambda a, b: "rect",
+                addByTwoPoints=lambda a, b: _Obj(
+                    endSketchPoint=_Obj(), startSketchPoint=_Obj())),
             sketchCircles=_Obj(addByCenterRadius=lambda c, r: "circ"),
             sketchArcs=_Obj(addByCenterStartSweep=lambda *a: _Obj(
                 endSketchPoint=_Obj(), startSketchPoint=_Obj())))
@@ -32,7 +35,7 @@ class ExtrudeFeatures:
 class RevolveFeatures:
     last = None
     def createInput(self, profile, axis, op):
-        return _Obj()
+        return _Obj(setAngleExtent=lambda *a: None)
     def add(self, inp):
         RevolveFeatures.last = ("revolve",)
 
