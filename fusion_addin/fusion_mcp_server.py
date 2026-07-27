@@ -357,15 +357,27 @@ and the current design context, respond with ONLY a JSON object of this shape:
 {"actions":[{"action":"create_box","params":{"width":100,"height":50,"depth":5,"unit":"mm"},
 "explanation":"..."}]}
 Supported actions: create_box, create_cylinder, create_sphere, create_hole,
-apply_material. Use SI/mm. No prose outside the JSON."""
+apply_material. Use SI/mm. No prose outside the JSON.
+
+When the request names a REAL standardized part or interface (e.g. NEMA 17
+stepper mount, 608 bearing pocket, M5 clearance hole, DIN rail clip, GoPro
+mount, 2020 aluminum extrusion), use the PUBLISHED specification dimensions
+you know for it — e.g. NEMA 17: 42.3mm faceplate, 31.0mm bolt circle, 4x M3
+holes, 22mm pilot bore; 608 bearing: 22mm OD, 8mm ID, 7mm wide; M5 clearance:
+5.5mm. Put the source standard in each action's "explanation"
+(e.g. "M3 clearance per NEMA 17 bolt pattern, 31mm BCD"). Do NOT invent
+dimensions for standard parts."""
 
 
 @mcp.tool()
-def plan_design(prompt: str, units: str = "mm") -> Dict[str, Any]:
+def plan_design(prompt: str, units: str = "mm", ai_image: bool = False,
+                material: str = "aluminum") -> Dict[str, Any]:
     """Propose a CAD plan from a natural-language request.
 
     Returns a step plan + a synthetic preview PNG (base64). Nothing is built
     in the host CAD app — call execute_design / the geometry tools to commit.
+    Set ai_image=True to ALSO return a photorealistic AI rendering
+    (requires a local ComfyUI server; silently skipped when absent).
     """
     if make_preview is None:
         return {"error": "preview renderer (mcp_server.preview) not available"}
@@ -384,12 +396,29 @@ def plan_design(prompt: str, units: str = "mm") -> Dict[str, Any]:
     except Exception:
         parsed = None
     preview = make_preview(raw if isinstance(raw, str) else json.dumps(raw or {}), parsed)
-    return {
+    result = {
         "status": "planned",
         "actions": preview["actions"],
         "plan_text": preview["plan_text"],
         "preview_png": preview["preview_png"],
     }
+    if ai_image:
+        try:
+            import base64 as _b64
+            import tempfile as _tmp
+            from mcp_server.render_ai import ai_render
+            with _tmp.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                out = ai_render(preview["actions"], description=prompt,
+                                material=material, out_path=tf.name)
+            if out:
+                with open(out, "rb") as f:
+                    result["ai_render_png"] = (
+                        "data:image/png;base64," + _b64.b64encode(f.read()).decode())
+            else:
+                result["ai_render_note"] = "ComfyUI not reachable or no checkpoint; schematic only"
+        except Exception as e:  # AI render is best-effort, never breaks planning
+            result["ai_render_note"] = f"AI render skipped: {e}"
+    return result
 
 
 def _design_context() -> Dict[str, Any]:
